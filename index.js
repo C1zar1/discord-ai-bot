@@ -7,7 +7,7 @@ const {
   SlashCommandBuilder,
   EmbedBuilder,
 } = require('discord.js');
-const fetch = (await import('node-fetch')).default;
+const { request } = require('undici'); // вместо node-fetch
 
 // ---------- НАСТРОЙКИ ----------
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;   // токен бота
@@ -64,25 +64,31 @@ client.on('interactionCreate', async interaction => {
   await interaction.deferReply();
 
   try {
-    const res = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${DEEPSEEK_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [{ role: 'user', content: question }],
-      }),
+    const body = JSON.stringify({
+      model: 'deepseek-chat',
+      messages: [{ role: 'user', content: question }],
     });
 
-    if (!res.ok) {
-      const txt = await res.text();
-      console.error('❌ DeepSeek HTTP error:', res.status, txt);
-      throw new Error(`HTTP ${res.status}`);
+    const { body: resBody, statusCode } = await request(
+      'https://api.deepseek.com/chat/completions',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${DEEPSEEK_KEY}`,
+        },
+        body,
+      }
+    );
+
+    const textRes = await resBody.text();
+
+    if (statusCode < 200 || statusCode >= 300) {
+      console.error('❌ DeepSeek HTTP error:', statusCode, textRes);
+      throw new Error(`HTTP ${statusCode}`);
     }
 
-    const data = await res.json();
+    const data = JSON.parse(textRes);
     const text =
       data.choices?.[0]?.message?.content?.slice(0, 4000) ||
       'ИИ не вернул текста.';
