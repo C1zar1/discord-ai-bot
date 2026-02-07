@@ -7,12 +7,15 @@ const {
   SlashCommandBuilder,
   EmbedBuilder,
 } = require('discord.js');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { GoogleGenAI } = require('@google/genai'); // новый SDK
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
+// Инициализация Gemini
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+
+// СЛЭШ-КОМАНДЫ (глобально, уже работают у тебя)
 const commands = [
   new SlashCommandBuilder()
     .setName('request')
@@ -29,7 +32,7 @@ async function registerCommands() {
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
   try {
-    console.log('⏳ Регистрирую ГЛОБАЛЬНЫЕ команды...');
+    console.log('⏳ Регистрирую глобальные команды...');
     await rest.put(
       Routes.applicationCommands(process.env.CLIENT_ID),
       { body: commands },
@@ -53,18 +56,24 @@ client.on('interactionCreate', async interaction => {
   await interaction.deferReply();
 
   try {
-    const result = await model.generateContent(question);
-    const text = result.response.text().slice(0, 4000);
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.0-flash', // актуальная модель [web:110][web:121]
+      contents: question,
+    });
+
+    const text = response.text || 'ИИ не вернул текст.';
 
     const embed = new EmbedBuilder()
       .setTitle('🤖 Ответ ИИ')
-      .setDescription(text)
+      .setDescription(text.slice(0, 4000))
       .setColor(0x00ff88);
 
     await interaction.editReply({ embeds: [embed] });
-  } catch (err) {
-    console.error('❌ Ошибка Gemini:', err);
-    await interaction.editReply('❌ Ошибка при обращении к ИИ.');
+  } catch (e) {
+    console.error('❌ Gemini error name:', e.name);
+    console.error('❌ Gemini error message:', e.message);
+    console.error('❌ Gemini error status:', e.status);
+    await interaction.editReply('❌ Ошибка при обращении к ИИ. Проверь GEMINI_API_KEY или лимиты.');
   }
 });
 
