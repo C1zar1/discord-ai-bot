@@ -7,25 +7,24 @@ const {
   SlashCommandBuilder,
   EmbedBuilder,
 } = require('discord.js');
-const { GoogleGenAI } = require('@google/genai');
+const fetch = (await import('node-fetch')).default;
 
 // ---------- НАСТРОЙКИ ----------
-const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const CLIENT_ID = process.env.CLIENT_ID; // Application ID из Dev Portal
+const DISCORD_TOKEN = process.env.DISCORD_TOKEN;   // токен бота
+const CLIENT_ID = process.env.CLIENT_ID;           // Application ID
+const DEEPSEEK_KEY = process.env.DEEPSEEK_KEY;     // ключ от DeepSeek
 
 console.log('DEBUG CLIENT_ID:', CLIENT_ID);
-console.log('DEBUG GEMINI_API_KEY prefix:', GEMINI_API_KEY ? GEMINI_API_KEY.slice(0, 10) : 'NO KEY');
+console.log('DEBUG DEEPSEEK_KEY prefix:', DEEPSEEK_KEY ? DEEPSEEK_KEY.slice(0, 8) : 'NO KEY');
 
 // ---------- ИНИЦИАЛИЗАЦИЯ ----------
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
-const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
 // ---------- СЛЭШ-КОМАНДЫ ----------
 const commands = [
   new SlashCommandBuilder()
     .setName('request')
-    .setDescription('Спросить ИИ Gemini')
+    .setDescription('Спросить ИИ (DeepSeek)')
     .addStringOption(option =>
       option
         .setName('question')
@@ -45,8 +44,7 @@ async function registerCommands() {
     );
     console.log('✅ Глобальные команды зарегистрированы!');
   } catch (error) {
-    console.error('❌ Ошибка регистрации команд:');
-    console.error(error.rawError ?? error);
+    console.error('❌ Ошибка регистрации команд:', error.rawError ?? error);
   }
 }
 
@@ -66,31 +64,38 @@ client.on('interactionCreate', async interaction => {
   await interaction.deferReply();
 
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash', // актуальная лёгкая модель
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: question }],
-        },
-      ],
+    const res = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${DEEPSEEK_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        messages: [{ role: 'user', content: question }],
+      }),
     });
 
-    const text = response.text || 'ИИ не вернул текст.';
+    if (!res.ok) {
+      const txt = await res.text();
+      console.error('❌ DeepSeek HTTP error:', res.status, txt);
+      throw new Error(`HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    const text =
+      data.choices?.[0]?.message?.content?.slice(0, 4000) ||
+      'ИИ не вернул текста.';
 
     const embed = new EmbedBuilder()
-      .setTitle('🤖 Ответ ИИ')
-      .setDescription(text.slice(0, 4000))
+      .setTitle('🤖 Ответ DeepSeek')
+      .setDescription(text)
       .setColor(0x00ff88);
 
     await interaction.editReply({ embeds: [embed] });
   } catch (e) {
-    console.error('❌ Gemini error NAME:', e.name);
-    console.error('❌ Gemini error MESSAGE:', e.message);
-    console.error('❌ Gemini error STATUS:', e.status);
-    console.error('❌ Gemini error FULL:', e);
-
-    await interaction.editReply('❌ Ошибка при обращении к ИИ. Проверь GEMINI_API_KEY или лимиты.');
+    console.error('❌ DeepSeek error:', e);
+    await interaction.editReply('❌ Ошибка при обращении к ИИ (DeepSeek).');
   }
 });
 
