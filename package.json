@@ -1,15 +1,15 @@
 {
   "name": "discord-ai-bot",
   "version": "1.0.0",
-  "description": "AI Discord Bot",
+  "description": "Discord AI bot with DeepSeek",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
     "discord.js": "^14.15.3",
-    "@google/genai": "^0.3.0",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "node-fetch": "^3.3.2"
   },
   "engines": {
     "node": ">=18.0.0"
