@@ -4,7 +4,8 @@
   "description": "AI Discord Bot",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "register": "node register-commands.js"
   },
   "dependencies": {
     "discord.js": "^14.15.3",
