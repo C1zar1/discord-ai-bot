@@ -7,19 +7,25 @@ const {
   SlashCommandBuilder,
   EmbedBuilder,
 } = require('discord.js');
-const { GoogleGenAI } = require('@google/genai'); // новый SDK
+const { GoogleGenAI } = require('@google/genai');
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
-
-// Инициализация Gemini
+// ---------- НАСТРОЙКИ ----------
+const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const CLIENT_ID = process.env.CLIENT_ID; // Application ID из Dev Portal
+
+console.log('DEBUG CLIENT_ID:', CLIENT_ID);
+console.log('DEBUG GEMINI_API_KEY prefix:', GEMINI_API_KEY ? GEMINI_API_KEY.slice(0, 10) : 'NO KEY');
+
+// ---------- ИНИЦИАЛИЗАЦИЯ ----------
+const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
-// СЛЭШ-КОМАНДЫ (глобально, уже работают у тебя)
+// ---------- СЛЭШ-КОМАНДЫ ----------
 const commands = [
   new SlashCommandBuilder()
     .setName('request')
-    .setDescription('Спросить ИИ')
+    .setDescription('Спросить ИИ Gemini')
     .addStringOption(option =>
       option
         .setName('question')
@@ -29,17 +35,18 @@ const commands = [
 ].map(c => c.toJSON());
 
 async function registerCommands() {
-  const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+  const rest = new REST({ version: '10' }).setToken(DISCORD_TOKEN);
 
   try {
-    console.log('⏳ Регистрирую глобальные команды...');
+    console.log('⏳ Регистрирую ГЛОБАЛЬНЫЕ команды...');
     await rest.put(
-      Routes.applicationCommands(process.env.CLIENT_ID),
+      Routes.applicationCommands(CLIENT_ID),
       { body: commands },
     );
     console.log('✅ Глобальные команды зарегистрированы!');
   } catch (error) {
-    console.error('❌ Ошибка регистрации команд:', error.rawError ?? error);
+    console.error('❌ Ошибка регистрации команд:');
+    console.error(error.rawError ?? error);
   }
 }
 
@@ -48,17 +55,25 @@ client.once('ready', async () => {
   await registerCommands();
 });
 
+// ---------- ОБРАБОТКА /request ----------
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
   if (interaction.commandName !== 'request') return;
 
   const question = interaction.options.getString('question');
+  console.log('⚡ /request:', question);
+
   await interaction.deferReply();
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash', // актуальная модель [web:110][web:121]
-      contents: question,
+      model: 'gemini-2.0-flash', // актуальная лёгкая модель
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: question }],
+        },
+      ],
     });
 
     const text = response.text || 'ИИ не вернул текст.';
@@ -70,11 +85,13 @@ client.on('interactionCreate', async interaction => {
 
     await interaction.editReply({ embeds: [embed] });
   } catch (e) {
-    console.error('❌ Gemini error name:', e.name);
-    console.error('❌ Gemini error message:', e.message);
-    console.error('❌ Gemini error status:', e.status);
+    console.error('❌ Gemini error NAME:', e.name);
+    console.error('❌ Gemini error MESSAGE:', e.message);
+    console.error('❌ Gemini error STATUS:', e.status);
+    console.error('❌ Gemini error FULL:', e);
+
     await interaction.editReply('❌ Ошибка при обращении к ИИ. Проверь GEMINI_API_KEY или лимиты.');
   }
 });
 
-client.login(process.env.DISCORD_TOKEN);
+client.login(DISCORD_TOKEN);
